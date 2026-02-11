@@ -357,4 +357,278 @@ router.get('/member-report/:email', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Akıllı görev atama önerisi
+ */
+router.post('/suggest-assignee', async (req: Request, res: Response) => {
+  try {
+    const { task, teamMembers } = req.body;
+    
+    if (!task) {
+      return res.status(400).json({
+        success: false,
+        error: 'Görev bilgisi gerekli'
+      });
+    }
+
+    // Takım üyeleri verilmemişse Jira'dan çek
+    let members = teamMembers;
+    if (!members || members.length === 0) {
+      try {
+        const allIssues = await jiraService.getIssues(undefined, 200);
+        const memberStats = new Map<string, any>();
+        
+        allIssues.forEach(issue => {
+          const assignee = issue.fields.assignee?.emailAddress || issue.fields.assignee?.displayName;
+          if (assignee) {
+            const current = memberStats.get(assignee) || { member: assignee, currentTasks: 0, completedTasks: 0 };
+            if (issue.fields.status?.name !== 'Done') {
+              current.currentTasks++;
+            } else {
+              current.completedTasks++;
+            }
+            memberStats.set(assignee, current);
+          }
+        });
+        
+        members = Array.from(memberStats.values());
+      } catch (jiraError) {
+        console.log('Jira verisi alınamadı, demo verilerle devam ediliyor');
+        members = [
+          { member: 'Takım Üyesi 1', currentTasks: 3, completedTasks: 10 },
+          { member: 'Takım Üyesi 2', currentTasks: 5, completedTasks: 8 },
+          { member: 'Takım Üyesi 3', currentTasks: 2, completedTasks: 12 }
+        ];
+      }
+    }
+
+    const suggestion = await aiAgentService.suggestAssignee(task, members);
+    
+    res.json({
+      success: true,
+      data: suggestion
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Sprint retrospective analizi
+ */
+router.post('/retrospective', async (req: Request, res: Response) => {
+  try {
+    const { sprintId, boardId } = req.body;
+    
+    let sprintData: any = {};
+    
+    try {
+      // Sprint verilerini topla
+      if (sprintId) {
+        const sprintIssues = await jiraService.getSprintIssues(sprintId);
+        sprintData = {
+          sprintId,
+          totalIssues: sprintIssues.length,
+          completedIssues: sprintIssues.filter(i => i.fields.status?.name === 'Done'),
+          inProgressIssues: sprintIssues.filter(i => i.fields.status?.name === 'In Progress'),
+          todoIssues: sprintIssues.filter(i => i.fields.status?.name === 'To Do'),
+          plannedIssues: sprintIssues.length,
+          issues: sprintIssues
+        };
+      } else if (boardId) {
+        const activeSprint = await jiraService.getActiveSprint(boardId);
+        if (activeSprint) {
+          const sprintIssues = await jiraService.getSprintIssues(activeSprint.id);
+          sprintData = {
+            sprintId: activeSprint.id,
+            sprintName: activeSprint.name,
+            totalIssues: sprintIssues.length,
+            completedIssues: sprintIssues.filter(i => i.fields.status?.name === 'Done'),
+            inProgressIssues: sprintIssues.filter(i => i.fields.status?.name === 'In Progress'),
+            todoIssues: sprintIssues.filter(i => i.fields.status?.name === 'To Do'),
+            plannedIssues: sprintIssues.length,
+            issues: sprintIssues
+          };
+        }
+      } else {
+        // Genel proje verileri
+        const allIssues = await jiraService.getIssues(undefined, 100);
+        sprintData = {
+          totalIssues: allIssues.length,
+          completedIssues: allIssues.filter(i => i.fields.status?.name === 'Done'),
+          inProgressIssues: allIssues.filter(i => i.fields.status?.name === 'In Progress'),
+          todoIssues: allIssues.filter(i => i.fields.status?.name === 'To Do'),
+          plannedIssues: allIssues.length,
+          issues: allIssues
+        };
+      }
+    } catch (jiraError: any) {
+      console.log('Jira verisi alınamadı, demo verilerle devam ediliyor:', jiraError.message);
+      sprintData = {
+        totalIssues: 20,
+        completedIssues: [],
+        plannedIssues: 25,
+        demoMode: true
+      };
+    }
+
+    const retrospective = await aiAgentService.generateRetrospective(sprintData);
+    
+    res.json({
+      success: true,
+      data: retrospective
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Blocker detection - bloke olmuş görevleri tespit eder
+ */
+router.get('/detect-blockers', async (req: Request, res: Response) => {
+  try {
+    let issues: JiraIssue[] = [];
+    
+    try {
+      issues = await jiraService.getIssues(undefined, 200);
+    } catch (jiraError: any) {
+      console.log('Jira verisi alınamadı, demo verilerle devam ediliyor');
+    }
+    
+    const blockerAnalysis = await aiAgentService.detectBlockers(issues);
+    
+    res.json({
+      success: true,
+      data: blockerAnalysis
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Sprint risk analizi
+ */
+router.post('/sprint-risk', async (req: Request, res: Response) => {
+  try {
+    const { sprintId, boardId, remainingDays } = req.body;
+    
+    let sprintData: any = { remainingDays: remainingDays || 7 };
+    
+    try {
+      if (sprintId) {
+        const sprintIssues = await jiraService.getSprintIssues(sprintId);
+        const completedIssues = sprintIssues.filter(i => 
+          i.fields.status?.statusCategory?.name === 'Tamamlandı' || 
+          i.fields.status?.statusCategory?.name === 'Done' ||
+          i.fields.status?.name === 'Done'
+        );
+        const inProgressIssues = sprintIssues.filter(i => 
+          i.fields.status?.statusCategory?.name === 'Devam Ediyor' || 
+          i.fields.status?.statusCategory?.name === 'In Progress' ||
+          i.fields.status?.name === 'In Progress'
+        );
+        const todoIssues = sprintIssues.filter(i => 
+          i.fields.status?.statusCategory?.name === 'Yapılacaklar' || 
+          i.fields.status?.statusCategory?.name === 'To Do' ||
+          i.fields.status?.name === 'To Do' ||
+          i.fields.status?.name === 'Backlog'
+        );
+        
+        sprintData.totalIssues = sprintIssues.length;
+        sprintData.completedIssues = completedIssues;
+        sprintData.inProgressIssues = inProgressIssues;
+        sprintData.todoIssues = todoIssues;
+      } else if (boardId) {
+        const activeSprint = await jiraService.getActiveSprint(boardId);
+        if (activeSprint) {
+          const sprintIssues = await jiraService.getSprintIssues(activeSprint.id);
+          const completedIssues = sprintIssues.filter(i => 
+            i.fields.status?.statusCategory?.name === 'Tamamlandı' || 
+            i.fields.status?.statusCategory?.name === 'Done' ||
+            i.fields.status?.name === 'Done'
+          );
+          const inProgressIssues = sprintIssues.filter(i => 
+            i.fields.status?.statusCategory?.name === 'Devam Ediyor' || 
+            i.fields.status?.statusCategory?.name === 'In Progress' ||
+            i.fields.status?.name === 'In Progress'
+          );
+          const todoIssues = sprintIssues.filter(i => 
+            i.fields.status?.statusCategory?.name === 'Yapılacaklar' || 
+            i.fields.status?.statusCategory?.name === 'To Do' ||
+            i.fields.status?.name === 'To Do' ||
+            i.fields.status?.name === 'Backlog'
+          );
+          
+          sprintData.totalIssues = sprintIssues.length;
+          sprintData.completedIssues = completedIssues;
+          sprintData.inProgressIssues = inProgressIssues;
+          sprintData.todoIssues = todoIssues;
+        } else {
+          // Aktif sprint yoksa demo verilerle devam et
+          throw new Error('No active sprint found');
+        }
+      } else {
+        // Ne sprint ID ne de board ID verilmemişse demo verilerle devam et
+        throw new Error('No sprint or board ID provided');
+      }
+    } catch (jiraError: any) {
+      console.log('Jira verisi alınamadı, demo verilerle devam ediliyor:', jiraError.message);
+      sprintData = {
+        totalIssues: 20,
+        completedIssues: [1, 2, 3, 4, 5],
+        inProgressIssues: [1, 2, 3, 4, 5, 6, 7],
+        todoIssues: [1, 2, 3, 4, 5, 6, 7, 8],
+        remainingDays: remainingDays || 7
+      };
+    }
+    
+    const riskAnalysis = await aiAgentService.calculateSprintRisk(sprintData);
+    
+    res.json({
+      success: true,
+      data: riskAnalysis
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Velocity tracking analizi
+ */
+router.post('/velocity-analysis', async (req: Request, res: Response) => {
+  try {
+    const { sprintHistory } = req.body;
+    
+    // Sprint geçmişi verilmemişse mock data kullan
+    const history = sprintHistory || [];
+    
+    const velocityAnalysis = await aiAgentService.analyzeVelocity(history);
+    
+    res.json({
+      success: true,
+      data: velocityAnalysis
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

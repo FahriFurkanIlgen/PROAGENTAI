@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bar Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #f9fafb;
+        }
+        
+        .container {
+            max-width: 800px;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f0f4f8;
+            border-radius: 8px;
+        }
+
+        .risk-bar {
+            width: 100%;
+            height: 30px;
+            background: #e5e7eb;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .risk-fill {
+            height: 100%;
+            min-height: 30px;
+            transition: width 0.5s ease;
+            display: block;
+        }
+
+        .sprint-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .progress-bar {
+            flex: 1;
+            min-width: 200px;
+            height: 25px;
+            background: #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            min-height: 25px;
+            background: linear-gradient(90deg, #10b981, #34d399);
+            transition: width 0.5s ease;
+            display: block;
+        }
+
+        .sprint-stats {
+            min-width: 100px;
+            text-align: right;
+            font-weight: 600;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Progress Bar Test</h1>
+        
+        <div class="test-section">
+            <h3>Risk Bar - 80%</h3>
+            <div class="risk-bar">
+                <div class="risk-fill" style="width: 80%; background: #f59e0b"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Risk Bar - 30%</h3>
+            <div class="risk-bar">
+                <div class="risk-fill" style="width: 30%; background: #ef4444"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Sprint Progress - 88%</h3>
+            <div class="sprint-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 88%"></div>
+                </div>
+                <span class="sprint-stats">14/16 (88%)</span>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Sprint Progress - 50%</h3>
+            <div class="sprint-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 50%"></div>
+                </div>
+                <span class="sprint-stats">10/20 (50%)</span>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Sprint Progress - 10%</h3>
+            <div class="sprint-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 10%"></div>
+                </div>
+                <span class="sprint-stats">2/20 (10%)</span>
+            </div>
+        </div>
+
+        <button onclick="testAPI()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">Velocity API Test Et</button>
+        
+        <div id="api-result" style="margin-top: 20px; padding: 20px; background: #fff; border: 2px solid #e5e7eb; border-radius: 8px; display: none;"></div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<p>⏳ API çağrılıyor...</p>';
+            
+            try {
+                const response = await fetch('/api/agent/velocity-analysis', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const data = result.data;
+                    let html = `
+                        <h3>✅ API Başarılı</h3>
+                        <p><strong>Ortalama Velocity:</strong> ${data.averageVelocity}</p>
+                        <p><strong>Trend:</strong> ${data.trend}</p>
+                        <h4>Sprint Verileri:</h4>
+                    `;
+                    
+                    data.sprints.forEach(sprint => {
+                        html += `
+                            <div style="margin: 15px 0; padding: 15px; background: #f9fafb; border-radius: 5px;">
+                                <p><strong>${sprint.sprintName}:</strong></p>
+                                <div class="sprint-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${sprint.completionRate}%"></div>
+                                    </div>
+                                    <span class="sprint-stats">${sprint.completed}/${sprint.planned} (${sprint.completionRate}%)</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<p>❌ Hata: ${result.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p>❌ Bağlantı Hatası: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

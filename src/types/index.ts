@@ -28,6 +28,10 @@ export interface JiraIssue {
     } | null;
     status?: {
       name: string;
+      statusCategory?: {
+        name: string;
+        key?: string;
+      };
     };
     labels?: string[];
     updated?: string;

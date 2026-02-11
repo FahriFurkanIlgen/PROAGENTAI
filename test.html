@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .progress-bar {
+            flex: 1;
+            height: 25px;
+            background: #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #34d399);
+            transition: width 0.5s ease;
+        }
+
+        .risk-bar {
+            height: 30px;
+            background: #e5e7eb;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .risk-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+    <h2>Progress Bar Test</h2>
+    
+    <div>
+        <p>Progress: 75%</p>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 75%"></div>
+        </div>
+    </div>
+
+    <div>
+        <p>Risk: 60%</p>
+        <div class="risk-bar">
+            <div class="risk-fill" style="width: 60%; background: #f59e0b"></div>
+        </div>
+    </div>
+
+    <div>
+        <p>Progress: 0% (Empty)</p>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 0%"></div>
+        </div>
+    </div>
+</body>
+</html>

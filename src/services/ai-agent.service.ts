@@ -383,6 +383,334 @@ export class AIAgentService {
   }
 
   /**
+   * Görev için en uygun takım üyesini önerir
+   */
+  async suggestAssignee(task: JiraIssue, teamMembers: any[]): Promise<any> {
+    this.checkOpenAI();
+    
+    // Demo mode
+    if (this.demoMode) {
+      return this.getMockAssignmentSuggestion(task, teamMembers);
+    }
+
+    const systemPrompt = `Sen bir Agile proje yöneticisisin.
+    Verilen görev ve takım üyesi bilgilerine göre en uygun atamayı öner.
+    
+    Değerlendirme kriterleri:
+    - Üyenin mevcut iş yükü
+    - Geçmiş performans ve tamamlama hızı
+    - Görev tipi ve üyenin uzmanlık alanı
+    - Takım dengesi
+    
+    JSON formatında döndür:
+    {
+      "recommendedAssignee": "string",
+      "confidence": number, // 0-100
+      "reasoning": "string",
+      "alternatives": [{
+        "assignee": "string",
+        "reason": "string"
+      }]
+    }`;
+
+    const userPrompt = `
+    Görev: ${JSON.stringify(task, null, 2)}
+    
+    Takım Üyeleri: ${JSON.stringify(teamMembers, null, 2)}
+    
+    En uygun atamayı öner.
+    `;
+
+    const completion = await this.openai!.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.5,
+    });
+
+    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      throw new Error('AI response is empty');
+    }
+
+    return JSON.parse(responseContent);
+  }
+
+  /**
+   * Sprint retrospective analizi yapar
+   */
+  async generateRetrospective(sprintData: any): Promise<any> {
+    this.checkOpenAI();
+    
+    // Demo mode
+    if (this.demoMode) {
+      return this.getMockRetrospective(sprintData);
+    }
+
+    const systemPrompt = `Sen deneyimli bir Scrum Master'sın.
+    Sprint verilerini analiz edip retrospective raporu hazırla.
+    
+    Rapor içeriği:
+    - İyi giden şeyler (What went well)
+    - İyileştirilmesi gerekenler (What didn't go well)
+    - Aksiyon maddeleri (Action items)
+    - Takım performans değerlendirmesi
+    - Öneriler
+    
+    JSON formatında döndür:
+    {
+      "summary": "string",
+      "whatWentWell": ["string"],
+      "whatDidntGoWell": ["string"],
+      "actionItems": [{
+        "title": "string",
+        "description": "string",
+        "priority": "high|medium|low"
+      }],
+      "teamPerformance": {
+        "score": number, // 0-10
+        "analysis": "string"
+      },
+      "recommendations": ["string"]
+    }`;
+
+    const userPrompt = `
+    Sprint Verileri:
+    ${JSON.stringify(sprintData, null, 2)}
+    
+    Retrospective raporu hazırla.
+    `;
+
+    const completion = await this.openai!.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.6,
+    });
+
+    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      throw new Error('AI response is empty');
+    }
+
+    return JSON.parse(responseContent);
+  }
+
+  /**
+   * Blocker detection - uzun süredir devam eden görevleri tespit eder
+   */
+  async detectBlockers(issues: JiraIssue[]): Promise<any> {
+    const now = new Date();
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+    
+    const inProgressIssues = issues.filter(issue => 
+      issue.fields.status?.name === 'In Progress' || 
+      issue.fields.status?.name === 'In Review'
+    );
+    
+    const blockedIssues = inProgressIssues.filter(issue => {
+      if (!issue.fields.updated) return false;
+      const updatedDate = new Date(issue.fields.updated);
+      return updatedDate < threeDaysAgo;
+    });
+    
+    // Demo mode veya AI analizi
+    if (this.demoMode || !this.openai) {
+      return this.getMockBlockerAnalysis(blockedIssues);
+    }
+    
+    if (blockedIssues.length === 0) {
+      return {
+        blockedCount: 0,
+        blockers: [],
+        summary: 'Hiçbir bloke olmuş görev tespit edilmedi. İlerleme sağlıklı görünüyor.'
+      };
+    }
+
+    const systemPrompt = `Sen bir proje yöneticisisin.
+    Uzun süredir ilerleme kaydedilmeyen görevleri analiz et ve bloke olduklarını tespit et.
+    Her görev için:
+    - Muhtemel blokaj nedeni
+    - Risk seviyesi
+    - Önerilen aksiyonlar
+    
+    JSON formatında döndür:
+    {
+      "blockedCount": number,
+      "summary": "string",
+      "blockers": [{
+        "issueKey": "string",
+        "title": "string",
+        "daysStuck": number,
+        "reason": "string",
+        "riskLevel": "high|medium|low",
+        "recommendations": ["string"]
+      }]
+    }`;
+
+    const userPrompt = `Bloke olmuş olabilecek görevler:
+    ${JSON.stringify(blockedIssues, null, 2)}`;
+
+    const completion = await this.openai!.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.5,
+    });
+
+    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      throw new Error('AI response is empty');
+    }
+
+    return JSON.parse(responseContent);
+  }
+
+  /**
+   * Sprint risk skorlaması
+   */
+  async calculateSprintRisk(sprintData: any): Promise<any> {
+    const totalIssues = sprintData.totalIssues || 0;
+    const completedIssues = sprintData.completedIssues?.length || 0;
+    const inProgressIssues = sprintData.inProgressIssues?.length || 0;
+    const todoIssues = sprintData.todoIssues?.length || 0;
+    
+    console.log('Sprint Risk Calculation:', {
+      totalIssues,
+      completedIssues,
+      inProgressIssues,
+      todoIssues,
+      calculatedTotal: completedIssues + inProgressIssues + todoIssues
+    });
+    
+    // Eğer toplam issue sayısı verilmemişse hesapla
+    const actualTotal = totalIssues || (completedIssues + inProgressIssues + todoIssues);
+    
+    const completionRate = actualTotal > 0 ? (completedIssues / actualTotal) * 100 : 0;
+    const remainingDays = sprintData.remainingDays || 7;
+    const daysPerTask = remainingDays / (todoIssues + inProgressIssues) || 0;
+    
+    let riskScore = 0;
+    let riskLevel = 'low';
+    let risks: string[] = [];
+    
+    // Risk faktörleri
+    if (completionRate < 30) {
+      riskScore += 30;
+      risks.push('Tamamlanma oranı çok düşük');
+    } else if (completionRate < 50) {
+      riskScore += 15;
+      risks.push('Tamamlanma oranı hedefin altında');
+    }
+    
+    if (daysPerTask < 1 && (todoIssues + inProgressIssues) > 0) {
+      riskScore += 25;
+      risks.push('Kalan süre görev sayısına göre yetersiz');
+    }
+    
+    if (inProgressIssues > todoIssues * 2) {
+      riskScore += 20;
+      risks.push('Paralel çalışılan görev sayısı çok fazla');
+    }
+    
+    // Risk seviyesi belirleme
+    if (riskScore >= 50) riskLevel = 'high';
+    else if (riskScore >= 25) riskLevel = 'medium';
+    
+    return {
+      riskScore,
+      riskLevel,
+      risks,
+      completionRate: Math.round(completionRate),
+      recommendations: this.getSprintRiskRecommendations(riskLevel, risks)
+    };
+  }
+
+  private getSprintRiskRecommendations(riskLevel: string, risks: string[]): string[] {
+    const recommendations: string[] = [];
+    
+    if (riskLevel === 'high') {
+      recommendations.push('Acil durum toplantısı yapılmalı');
+      recommendations.push('Sprint kapsamı yeniden gözden geçirilmeli');
+      recommendations.push('Kritik olmayan görevler sonraki sprint\'e taşınmalı');
+    }
+    
+    if (risks.some(r => r.includes('paralel'))) {
+      recommendations.push('WIP (Work in Progress) limiti konulmalı');
+      recommendations.push('Görevler tamamlanana kadar yeni görev alınmamalı');
+    }
+    
+    if (risks.some(r => r.includes('yetersiz'))) {
+      recommendations.push('Önceliklendirme yapılmalı, en kritik görevlere odaklanılmalı');
+      recommendations.push('Ek kaynak talebi değerlendirilmeli');
+    }
+    
+    return recommendations;
+  }
+
+  /**
+   * Velocity tracking - sprint hız analizi
+   */
+  async analyzeVelocity(sprintHistory: any[]): Promise<any> {
+    if (!sprintHistory || sprintHistory.length === 0) {
+      return this.getMockVelocityAnalysis();
+    }
+    
+    const velocities = sprintHistory.map(sprint => ({
+      sprintName: sprint.name || 'Sprint',
+      completed: sprint.completedIssues || 0,
+      planned: sprint.plannedIssues || 0,
+      completionRate: sprint.plannedIssues > 0 
+        ? Math.round((sprint.completedIssues / sprint.plannedIssues) * 100) 
+        : 0
+    }));
+    
+    const avgVelocity = velocities.reduce((sum, v) => sum + v.completed, 0) / velocities.length;
+    const trend = this.calculateTrend(velocities.map(v => v.completed));
+    
+    return {
+      averageVelocity: Math.round(avgVelocity),
+      trend, // 'increasing', 'decreasing', 'stable'
+      sprints: velocities,
+      recommendation: this.getVelocityRecommendation(trend, avgVelocity)
+    };
+  }
+
+  private calculateTrend(values: number[]): string {
+    if (values.length < 2) return 'stable';
+    
+    const firstHalf = values.slice(0, Math.floor(values.length / 2));
+    const secondHalf = values.slice(Math.floor(values.length / 2));
+    
+    const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+    
+    const diff = ((secondAvg - firstAvg) / firstAvg) * 100;
+    
+    if (diff > 10) return 'increasing';
+    if (diff < -10) return 'decreasing';
+    return 'stable';
+  }
+
+  private getVelocityRecommendation(trend: string, avgVelocity: number): string {
+    if (trend === 'increasing') {
+      return 'Takım hızı artmakta. Mevcut çalışma temposunu koruyun.';
+    } else if (trend === 'decreasing') {
+      return 'Takım hızı düşmekte. Retrospective\'de engelleri tartışın.';
+    }
+    return 'Takım hızı stabil. Planlama için ortalama ' + Math.round(avgVelocity) + ' görev baz alınabilir.';
+  }
+
+  /**
    * Demo mode için mock proje analizi
    */
   private getMockAnalysis(request: AIAnalysisRequest): AIAnalysisResponse {
@@ -601,6 +929,134 @@ ${completedIssues.map((issue, index) => `${index + 1}. **${issue.fields.summary}
         'Geride kalan üyelere destek verilmeli',
         'Sprint hedefleri gözden geçirilmeli'
       ],
+      demoMode: true
+    };
+  }
+
+  /**
+   * Demo atama önerisi
+   */
+  private getMockAssignmentSuggestion(task: JiraIssue, teamMembers: any[]): any {
+    const leastBusy = teamMembers.reduce((min, member) => 
+      member.currentTasks < min.currentTasks ? member : min
+    , teamMembers[0] || { member: 'Takım Üyesi', currentTasks: 0 });
+
+    return {
+      recommendedAssignee: leastBusy.member,
+      confidence: 85,
+      reasoning: `${leastBusy.member} şu anda en az görev yüküne sahip (${leastBusy.currentTasks} aktif görev). Bu görev için uygun deneyime sahip.`,
+      alternatives: teamMembers.filter(m => m.member !== leastBusy.member).slice(0, 2).map(m => ({
+        assignee: m.member,
+        reason: `${m.currentTasks} aktif görevi var, yedek seçenek olabilir`
+      })),
+      demoMode: true
+    };
+  }
+
+  /**
+   * Demo retrospective
+   */
+  private getMockRetrospective(sprintData: any): any {
+    const totalIssues = sprintData.completedIssues?.length || 0;
+    const plannedIssues = sprintData.plannedIssues || 0;
+    const completionRate = plannedIssues > 0 ? Math.round((totalIssues / plannedIssues) * 100) : 0;
+
+    return {
+      summary: `Sprint ${completionRate >= 80 ? 'başarılı' : 'hedeflerin altında'} tamamlandı. ${totalIssues} görev tamamlandı.`,
+      whatWentWell: [
+        'Takım iletişimi güçlüydü',
+        'Daily standup toplantıları düzenli yapıldı',
+        'Teknik borç azaltma çalışmaları başladı',
+        completionRate >= 80 ? 'Sprint hedeflerine ulaşıldı' : 'Bazı görevler erken tamamlandı'
+      ],
+      whatDidntGoWell: [
+        completionRate < 80 ? 'Sprint hedeflerine tam olarak ulaşılamadı' : 'Bazı görevler beklenenden uzun sürdü',
+        'Scope değişiklikleri oldu',
+        'Test süreçleri zaman aldı',
+        'Bağımlılık yönetiminde gecikmeler yaşandı'
+      ],
+      actionItems: [
+        {
+          title: 'Sprint planlama sürecini iyileştir',
+          description: 'Story point tahminlerini daha gerçekçi yap, geçmiş sprint verilerini kullan',
+          priority: 'high'
+        },
+        {
+          title: 'Test otomasyonunu artır',
+          description: 'Test süreçlerini hızlandırmak için otomasyon kapsamını genişlet',
+          priority: 'medium'
+        },
+        {
+          title: 'Bağımlılıkları erken tespit et',
+          description: 'Sprint başında tüm bağımlılıkları belirle ve risk planı oluştur',
+          priority: 'high'
+        }
+      ],
+      teamPerformance: {
+        score: completionRate >= 80 ? 8 : 6,
+        analysis: `Takım performansı ${completionRate >= 80 ? 'yüksek' : 'orta'} seviyede. Tamamlama oranı %${completionRate}. İletişim ve koordinasyon güçlü ancak planlama iyileştirilebilir.`
+      },
+      recommendations: [
+        'Gelecek sprint için kapasite planlamasını daha muhafazakar yap',
+        'Görev bağımlılıklarını görselleştir',
+        'Retrospective aksiyon maddelerini takip et',
+        'Takım üyeleri arasında bilgi paylaşımını artır'
+      ],
+      demoMode: true
+    };
+  }
+
+  /**
+   * Mock blocker analizi
+   */
+  private getMockBlockerAnalysis(blockedIssues: JiraIssue[]): any {
+    if (blockedIssues.length === 0) {
+      return {
+        blockedCount: 0,
+        blockers: [],
+        summary: 'Hiçbir bloke olmuş görev tespit edilmedi. İlerleme sağlıklı görünüyor.',
+        demoMode: true
+      };
+    }
+    
+    return {
+      blockedCount: blockedIssues.length,
+      summary: `${blockedIssues.length} görev 3 gündür ilerlemiyor ve bloke olmuş olabilir.`,
+      blockers: blockedIssues.slice(0, 5).map(issue => {
+        const updated = issue.fields.updated ? new Date(issue.fields.updated) : new Date();
+        const daysStuck = Math.floor((Date.now() - updated.getTime()) / (1000 * 60 * 60 * 24));
+        
+        return {
+          issueKey: issue.key || 'N/A',
+          title: issue.fields.summary,
+          daysStuck,
+          reason: 'Bağımlılık veya teknik zorluk nedeniyle ilerleme sağlanamıyor olabilir',
+          riskLevel: daysStuck > 5 ? 'high' : daysStuck > 3 ? 'medium' : 'low',
+          recommendations: [
+            'Ekip üyesiyle birebir görüşme yap',
+            'Teknik yardım gerekip gerekmediğini sor',
+            'Bağımlılıkları kontrol et'
+          ]
+        };
+      }),
+      demoMode: true
+    };
+  }
+
+  /**
+   * Mock velocity analizi
+   */
+  private getMockVelocityAnalysis(): any {
+    return {
+      averageVelocity: 15,
+      trend: 'increasing',
+      sprints: [
+        { sprintName: 'Sprint 1', completed: 12, planned: 15, completionRate: 80 },
+        { sprintName: 'Sprint 2', completed: 14, planned: 16, completionRate: 88 },
+        { sprintName: 'Sprint 3', completed: 16, planned: 18, completionRate: 89 },
+        { sprintName: 'Sprint 4', completed: 18, planned: 20, completionRate: 90 }
+      ],
+      recommendation: 'Takım hızı artmakta. Mevcut çalışma temposunu koruyun.',
       demoMode: true
     };
   }

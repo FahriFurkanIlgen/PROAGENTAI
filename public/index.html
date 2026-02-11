@@ -26,6 +26,7 @@
             <div class="tabs">
                 <button class="tab-button active" data-tab="analyze">📊 Proje Analizi</button>
                 <button class="tab-button" data-tab="sprint">🏃 Sprint Planlama</button>
+                <button class="tab-button" data-tab="ai-features">🤖 AI Özellikler</button>
                 <button class="tab-button" data-tab="issues">📋 Jira Görevleri</button>
                 <button class="tab-button" data-tab="report">📈 Rapor</button>
             </div>
@@ -104,6 +105,61 @@
                 </div>
             </div>
 
+            <!-- AI Features Tab -->
+            <div class="tab-content" id="ai-features">
+                <!-- Smart Assignment -->
+                <div class="card">
+                    <h2>🎯 Akıllı Görev Atama</h2>
+                    <p class="description">AI, takım üyelerinin iş yükü ve geçmiş performansına göre en uygun kişiyi önerir.</p>
+                    
+                    <div class="form-group">
+                        <label for="assignTaskKey">Görev Anahtarı (örn: CS-123)</label>
+                        <input type="text" id="assignTaskKey" placeholder="CS-123">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="assignTaskDescription">Veya Görev Açıklaması</label>
+                        <textarea id="assignTaskDescription" rows="3" placeholder="Yeni bir görev için açıklama yazın..."></textarea>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="suggestAssigneeBtn">
+                        🤖 Atama Öner
+                    </button>
+                    
+                    <div id="assignmentResult" class="result-section" style="display: none;">
+                        <h3>Atama Önerisi</h3>
+                        <div id="assignmentContent"></div>
+                    </div>
+                </div>
+
+                <!-- Sprint Retrospective -->
+                <div class="card">
+                    <h2>🔄 Sprint Retrospective AI</h2>
+                    <p class="description">Geçmiş sprint verilerini analiz eder ve iyileştirme önerileri sunar.</p>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="retroSprintId">Sprint ID (Opsiyonel)</label>
+                            <input type="number" id="retroSprintId" placeholder="Sprint ID">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="retroBoardId">Board ID (Opsiyonel)</label>
+                            <input type="number" id="retroBoardId" placeholder="54" value="54">
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="generateRetroBtn">
+                        📊 Retrospective Oluştur
+                    </button>
+                    
+                    <div id="retroResult" class="result-section" style="display: none;">
+                        <h3>Retrospective Raporu</h3>
+                        <div id="retroContent"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Issues Tab -->
             <div class="tab-content" id="issues">
                 <div class="card">
@@ -170,6 +226,66 @@
 
             <!-- Report Tab -->
             <div class="tab-content" id="report">
+                <!-- Blocker Detection -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🚨 Bloke Görev Tespiti</h2>
+                        <button class="btn btn-primary" id="detectBlockersBtn">
+                            🔍 Bloke Görevleri Tespit Et
+                        </button>
+                    </div>
+                    
+                    <div id="blockersResult" class="result-section">
+                        <div id="blockersContent" class="report-content">
+                            <p class="placeholder-text">Bloke görevleri tespit etmek için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sprint Risk Analysis -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⚠️ Sprint Risk Analizi</h2>
+                        <button class="btn btn-primary" id="analyzeRiskBtn">
+                            📊 Risk Analizi Yap
+                        </button>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="riskBoardId">Board ID</label>
+                            <input type="number" id="riskBoardId" placeholder="54" value="54">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="remainingDays">Kalan Gün</label>
+                            <input type="number" id="remainingDays" placeholder="7" value="7">
+                        </div>
+                    </div>
+                    
+                    <div id="riskResult" class="result-section">
+                        <div id="riskContent" class="report-content">
+                            <p class="placeholder-text">Risk analizi yapmak için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Velocity Tracking -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📈 Velocity Tracking</h2>
+                        <button class="btn btn-primary" id="analyzeVelocityBtn">
+                            🚀 Hız Analizi Yap
+                        </button>
+                    </div>
+                    
+                    <div id="velocityResult" class="result-section">
+                        <div id="velocityContent" class="report-content">
+                            <p class="placeholder-text">Velocity analizi yapmak için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Günlük Rapor -->
                 <div class="card">
                     <div class="card-header">

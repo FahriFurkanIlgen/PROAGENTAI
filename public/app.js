@@ -54,6 +54,34 @@ const elements = {
     analysisBoardId: document.getElementById('analysisBoardId'),
     sprintAnalysisContent: document.getElementById('sprintAnalysisContent'),
     
+    // Smart Assignment
+    assignTaskKey: document.getElementById('assignTaskKey'),
+    assignTaskDescription: document.getElementById('assignTaskDescription'),
+    suggestAssigneeBtn: document.getElementById('suggestAssigneeBtn'),
+    assignmentResult: document.getElementById('assignmentResult'),
+    assignmentContent: document.getElementById('assignmentContent'),
+    
+    // Retrospective
+    retroSprintId: document.getElementById('retroSprintId'),
+    retroBoardId: document.getElementById('retroBoardId'),
+    generateRetroBtn: document.getElementById('generateRetroBtn'),
+    retroResult: document.getElementById('retroResult'),
+    retroContent: document.getElementById('retroContent'),
+    
+    // Blocker Detection
+    detectBlockersBtn: document.getElementById('detectBlockersBtn'),
+    blockersContent: document.getElementById('blockersContent'),
+    
+    // Risk Analysis
+    analyzeRiskBtn: document.getElementById('analyzeRiskBtn'),
+    riskBoardId: document.getElementById('riskBoardId'),
+    remainingDays: document.getElementById('remainingDays'),
+    riskContent: document.getElementById('riskContent'),
+    
+    // Velocity
+    analyzeVelocityBtn: document.getElementById('analyzeVelocityBtn'),
+    velocityContent: document.getElementById('velocityContent'),
+    
     // Toast
     toast: document.getElementById('toast')
 };
@@ -98,6 +126,11 @@ function setupEventListeners() {
     elements.generateReportBtn.addEventListener('click', generateReport);
     elements.generateDailyReportBtn.addEventListener('click', generateDailyReport);
     elements.generateSprintAnalysisBtn.addEventListener('click', generateSprintAnalysis);
+    elements.suggestAssigneeBtn.addEventListener('click', suggestAssignee);
+    elements.generateRetroBtn.addEventListener('click', generateRetrospective);
+    elements.detectBlockersBtn.addEventListener('click', detectBlockers);
+    elements.analyzeRiskBtn.addEventListener('click', analyzeRisk);
+    elements.analyzeVelocityBtn.addEventListener('click', analyzeVelocity);
 }
 
 // Check Jira Connection
@@ -616,6 +649,412 @@ async function generateSprintAnalysis() {
     } finally {
         elements.generateSprintAnalysisBtn.disabled = false;
         elements.generateSprintAnalysisBtn.textContent = '📈 Sprint Analizi Yap';
+    }
+}
+
+// Suggest Assignee
+async function suggestAssignee() {
+    const taskKey = elements.assignTaskKey.value.trim();
+    const taskDescription = elements.assignTaskDescription.value.trim();
+    
+    if (!taskKey && !taskDescription) {
+        showToast('Görev anahtarı veya açıklama girin', 'error');
+        return;
+    }
+    
+    elements.suggestAssigneeBtn.disabled = true;
+    elements.suggestAssigneeBtn.textContent = '⏳ Analiz ediliyor...';
+    elements.assignmentResult.style.display = 'block';
+    elements.assignmentContent.innerHTML = '<p class="loading">AI atama önerisi hazırlıyor...</p>';
+    
+    try {
+        let task;
+        
+        if (taskKey) {
+            // Jira'dan görev bilgisini al
+            try {
+                const response = await fetch(`${API_BASE}/jira/issue/${taskKey}`);
+                const result = await response.json();
+                if (result.success) {
+                    task = result.data;
+                }
+            } catch (error) {
+                console.log('Jira\'dan görev alınamadı, açıklama kullanılacak');
+            }
+        }
+        
+        if (!task) {
+            task = {
+                fields: {
+                    summary: taskDescription,
+                    description: taskDescription,
+                    issuetype: { name: 'Task' }
+                }
+            };
+        }
+        
+        const response = await fetch(`${API_BASE}/agent/suggest-assignee`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const { recommendedAssignee, confidence, reasoning, alternatives, demoMode } = result.data;
+            
+            let html = `
+                <div class="assignment-suggestion">
+                    <div class="recommended-assignee">
+                        <h4>✅ Önerilen Kişi</h4>
+                        <div class="assignee-card primary">
+                            <div class="assignee-name">${recommendedAssignee}</div>
+                            <div class="confidence-badge">Güven: ${confidence}%</div>
+                        </div>
+                        <p class="reasoning">${reasoning}</p>
+                    </div>
+            `;
+            
+            if (alternatives && alternatives.length > 0) {
+                html += `
+                    <div class="alternative-assignees">
+                        <h4>🔄 Alternatif Seçenekler</h4>
+                        ${alternatives.map(alt => `
+                            <div class="assignee-card">
+                                <div class="assignee-name">${alt.assignee}</div>
+                                <p class="alt-reason">${alt.reason}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            if (demoMode) {
+                html += '<p class="demo-note">🟦 Demo modunda çalışıyor</p>';
+            }
+            
+            html += '</div>';
+            
+            elements.assignmentContent.innerHTML = html;
+            showToast('Atama önerisi hazırlandı', 'success');
+        } else {
+            elements.assignmentContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Atama önerisi oluşturulamadı', 'error');
+        }
+    } catch (error) {
+        elements.assignmentContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.suggestAssigneeBtn.disabled = false;
+        elements.suggestAssigneeBtn.textContent = '🤖 Atama Öner';
+    }
+}
+
+// Generate Retrospective
+async function generateRetrospective() {
+    elements.generateRetroBtn.disabled = true;
+    elements.generateRetroBtn.textContent = '⏳ Analiz ediliyor...';
+    elements.retroResult.style.display = 'block';
+    elements.retroContent.innerHTML = '<p class="loading">Sprint retrospective hazırlanıyor...</p>';
+    
+    try {
+        const sprintId = elements.retroSprintId.value;
+        const boardId = elements.retroBoardId.value;
+        
+        const requestBody = {};
+        if (sprintId) requestBody.sprintId = parseInt(sprintId);
+        if (boardId) requestBody.boardId = parseInt(boardId);
+        
+        const response = await fetch(`${API_BASE}/agent/retrospective`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const { summary, whatWentWell, whatDidntGoWell, actionItems, teamPerformance, recommendations, demoMode } = result.data;
+            
+            let html = `
+                <div class="retrospective-report">
+                    <div class="retro-summary">
+                        <h4>📝 Özet</h4>
+                        <p>${summary}</p>
+                    </div>
+                    
+                    <div class="retro-section success">
+                        <h4>✅ İyi Giden Şeyler</h4>
+                        <ul>
+                            ${whatWentWell.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="retro-section warning">
+                        <h4>⚠️ İyileştirilebilecekler</h4>
+                        <ul>
+                            ${whatDidntGoWell.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="retro-section action">
+                        <h4>🎯 Aksiyon Maddeleri</h4>
+                        ${actionItems.map(item => `
+                            <div class="action-item priority-${item.priority}">
+                                <strong>${item.title}</strong>
+                                <p>${item.description}</p>
+                                <span class="priority-badge ${item.priority}">${item.priority === 'high' ? 'Yüksek' : item.priority === 'medium' ? 'Orta' : 'Düşük'} Öncelik</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="retro-section performance">
+                        <h4>📊 Takım Performansı</h4>
+                        <div class="performance-score">
+                            <div class="score">${teamPerformance.score}/10</div>
+                            <p>${teamPerformance.analysis}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="retro-section recommendations">
+                        <h4>💡 Öneriler</h4>
+                        <ul>
+                            ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    ${demoMode ? '<p class="demo-note">🟦 Demo modunda çalışıyor</p>' : ''}
+                </div>
+            `;
+            
+            elements.retroContent.innerHTML = html;
+            showToast('Retrospective hazırlandı', 'success');
+        } else {
+            elements.retroContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Retrospective oluşturulamadı', 'error');
+        }
+    } catch (error) {
+        elements.retroContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.generateRetroBtn.disabled = false;
+        elements.generateRetroBtn.textContent = '📊 Retrospective Oluştur';
+    }
+}
+
+// Detect Blockers
+async function detectBlockers() {
+    elements.detectBlockersBtn.disabled = true;
+    elements.detectBlockersBtn.textContent = '⏳ Analiz ediliyor...';
+    elements.blockersContent.innerHTML = '<p class="loading">Bloke görevler tespit ediliyor...</p>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/agent/detect-blockers`);
+        const result = await response.json();
+        
+        if (result.success) {
+            const { blockedCount, summary, blockers, demoMode } = result.data;
+            
+            let html = `
+                <div class="blockers-report">
+                    <div class="summary-box ${blockedCount > 0 ? 'warning' : 'success'}">
+                        <h3>${blockedCount > 0 ? '⚠️' : '✅'} ${summary}</h3>
+                    </div>
+            `;
+            
+            if (blockers && blockers.length > 0) {
+                html += '<div class="blockers-list">';
+                blockers.forEach(blocker => {
+                    html += `
+                        <div class="blocker-card risk-${blocker.riskLevel}">
+                            <div class="blocker-header">
+                                <span class="issue-key">${blocker.issueKey}</span>
+                                <span class="days-stuck">${blocker.daysStuck} gün</span>
+                                <span class="risk-badge ${blocker.riskLevel}">${blocker.riskLevel === 'high' ? 'Yüksek Risk' : blocker.riskLevel === 'medium' ? 'Orta Risk' : 'Düşük Risk'}</span>
+                            </div>
+                            <h4>${blocker.title}</h4>
+                            <p class="reason"><strong>Muhtemel Neden:</strong> ${blocker.reason}</p>
+                            <div class="recommendations">
+                                <strong>Öneriler:</strong>
+                                <ul>
+                                    ${blocker.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            
+            if (demoMode) {
+                html += '<p class="demo-note">🟦 Demo modunda çalışıyor</p>';
+            }
+            
+            html += '</div>';
+            
+            elements.blockersContent.innerHTML = html;
+            showToast('Bloker tespiti tamamlandı', 'success');
+        } else {
+            elements.blockersContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Bloker tespiti yapılamadı', 'error');
+        }
+    } catch (error) {
+        elements.blockersContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.detectBlockersBtn.disabled = false;
+        elements.detectBlockersBtn.textContent = '🔍 Bloke Görevleri Tespit Et';
+    }
+}
+
+// Analyze Risk
+async function analyzeRisk() {
+    elements.analyzeRiskBtn.disabled = true;
+    elements.analyzeRiskBtn.textContent = '⏳ Analiz ediliyor...';
+    elements.riskContent.innerHTML = '<p class="loading">Sprint riski hesaplanıyor...</p>';
+    
+    try {
+        const boardId = elements.riskBoardId.value;
+        const remainingDays = elements.remainingDays.value;
+        
+        const response = await fetch(`${API_BASE}/agent/sprint-risk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                boardId: boardId ? parseInt(boardId) : undefined,
+                remainingDays: remainingDays ? parseInt(remainingDays) : 7
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const { riskScore, riskLevel, risks, completionRate, recommendations } = result.data;
+            
+            const riskColor = riskLevel === 'high' ? '#ef4444' : riskLevel === 'medium' ? '#f59e0b' : '#10b981';
+            const riskEmoji = riskLevel === 'high' ? '🔴' : riskLevel === 'medium' ? '🟡' : '🟢';
+            
+            let html = `
+                <div class="risk-analysis">
+                    <div class="risk-score-card" style="border-left: 5px solid ${riskColor}">
+                        <div class="risk-header">
+                            <h3>${riskEmoji} Risk Seviyesi: ${riskLevel === 'high' ? 'Yüksek' : riskLevel === 'medium' ? 'Orta' : 'Düşük'}</h3>
+                            <div class="risk-score">${riskScore}/100</div>
+                        </div>
+                        <div class="risk-bar">
+                            <div class="risk-fill" style="width: ${riskScore}%; background: ${riskColor}"></div>
+                        </div>
+                        <p class="completion-info">Sprint Tamamlanma: ${completionRate}%</p>
+                    </div>
+                    
+                    ${risks && risks.length > 0 ? `
+                        <div class="risk-factors">
+                            <h4>⚠️ Risk Faktörleri</h4>
+                            <ul>
+                                ${risks.map(risk => `<li>${risk}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${recommendations && recommendations.length > 0 ? `
+                        <div class="risk-recommendations">
+                            <h4>💡 Öneriler</h4>
+                            <ul>
+                                ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            elements.riskContent.innerHTML = html;
+            showToast('Risk analizi tamamlandı', 'success');
+        } else {
+            elements.riskContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Risk analizi yapılamadı', 'error');
+        }
+    } catch (error) {
+        elements.riskContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.analyzeRiskBtn.disabled = false;
+        elements.analyzeRiskBtn.textContent = '📊 Risk Analizi Yap';
+    }
+}
+
+// Analyze Velocity
+async function analyzeVelocity() {
+    elements.analyzeVelocityBtn.disabled = true;
+    elements.analyzeVelocityBtn.textContent = '⏳ Analiz ediliyor...';
+    elements.velocityContent.innerHTML = '<p class="loading">Velocity analizi yapılıyor...</p>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/agent/velocity-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const { averageVelocity, trend, sprints, recommendation, demoMode } = result.data;
+            
+            const trendEmoji = trend === 'increasing' ? '📈' : trend === 'decreasing' ? '📉' : '➡️';
+            const trendText = trend === 'increasing' ? 'Artıyor' : trend === 'decreasing' ? 'Azalıyor' : 'Stabil';
+            const trendColor = trend === 'increasing' ? '#10b981' : trend === 'decreasing' ? '#ef4444' : '#6b7280';
+            
+            let html = `
+                <div class="velocity-analysis">
+                    <div class="velocity-summary">
+                        <div class="velocity-stat">
+                            <div class="stat-label">Ortalama Velocity</div>
+                            <div class="stat-value">${averageVelocity}</div>
+                            <div class="stat-unit">görev/sprint</div>
+                        </div>
+                        <div class="velocity-stat" style="border-left: 4px solid ${trendColor}">
+                            <div class="stat-label">Trend</div>
+                            <div class="stat-value">${trendEmoji} ${trendText}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="recommendation-box">
+                        <h4>💡 Öneri</h4>
+                        <p>${recommendation}</p>
+                    </div>
+                    
+                    <div class="velocity-chart">
+                        <h4>Sprint Geçmişi</h4>
+                        ${sprints.map(sprint => `
+                            <div class="sprint-bar">
+                                <div class="sprint-label">${sprint.sprintName}</div>
+                                <div class="sprint-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${sprint.completionRate}%"></div>
+                                    </div>
+                                    <span class="sprint-stats">${sprint.completed}/${sprint.planned} (${sprint.completionRate}%)</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    ${demoMode ? '<p class="demo-note">🟦 Demo modunda çalışıyor</p>' : ''}
+                </div>
+            `;
+            
+            elements.velocityContent.innerHTML = html;
+            showToast('Velocity analizi tamamlandı', 'success');
+        } else {
+            elements.velocityContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Velocity analizi yapılamadı', 'error');
+        }
+    } catch (error) {
+        elements.velocityContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.analyzeVelocityBtn.disabled = false;
+        elements.analyzeVelocityBtn.textContent = '🚀 Hız Analizi Yap';
     }
 }
 
