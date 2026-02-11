@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProAgentAI - AI Project Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-content">
+                <h1>🤖 ProAgentAI</h1>
+                <p class="subtitle">AI Destekli Proje Yönetimi Asistanı</p>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-indicator" id="statusIndicator">●</span>
+                <span id="statusText">Bağlantı kontrol ediliyor...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Tab Navigation -->
+            <div class="tabs">
+                <button class="tab-button active" data-tab="analyze">📊 Proje Analizi</button>
+                <button class="tab-button" data-tab="sprint">🏃 Sprint Planlama</button>
+                <button class="tab-button" data-tab="issues">📋 Jira Görevleri</button>
+                <button class="tab-button" data-tab="report">📈 Rapor</button>
+            </div>
+
+            <!-- Analyze Tab -->
+            <div class="tab-content active" id="analyze">
+                <div class="card">
+                    <h2>Proje Gereksinimlerini Analiz Et</h2>
+                    <p class="description">Proje açıklamanızı girin, AI sizin için görevleri analiz edip öneriler sunsun.</p>
+                    
+                    <div class="form-group">
+                        <label for="projectDescription">Proje Açıklaması</label>
+                        <textarea 
+                            id="projectDescription" 
+                            rows="6" 
+                            placeholder="Örn: E-ticaret sitesi geliştirmek istiyorum. Kullanıcı kaydı, ürün listeleme, sepet ve ödeme özellikleri olacak..."
+                        ></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="projectContext">Ek Bağlam (Opsiyonel)</label>
+                        <textarea 
+                            id="projectContext" 
+                            rows="3" 
+                            placeholder="Teknoloji stack, deadline, takım bilgileri vs..."
+                        ></textarea>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button class="btn btn-primary" id="analyzeBtn">
+                            🔍 Analiz Et
+                        </button>
+                        <button class="btn btn-success" id="analyzeAndCreateBtn">
+                            ✨ Analiz Et ve Jira'da Oluştur
+                        </button>
+                    </div>
+                    
+                    <div id="analysisResult" class="result-section" style="display: none;">
+                        <h3>Analiz Sonucu</h3>
+                        <div id="analysisContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sprint Planning Tab -->
+            <div class="tab-content" id="sprint">
+                <div class="card">
+                    <h2>Sprint Planlama</h2>
+                    <p class="description">Takım kapasitesine göre optimal sprint planı oluşturun.</p>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="teamCapacity">Takım Kapasitesi (saat/sprint)</label>
+                            <input type="number" id="teamCapacity" value="120" min="1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="teamMembers">Takım Üyeleri (virgülle ayırın)</label>
+                            <input type="text" id="teamMembers" placeholder="Ali, Ayşe, Mehmet">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sprintGoals">Sprint Hedefleri (Opsiyonel)</label>
+                        <textarea id="sprintGoals" rows="3" placeholder="Bu sprint'te tamamlanması gereken ana hedefler..."></textarea>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="planSprintBtn">
+                        🎯 Sprint Planla
+                    </button>
+                    
+                    <div id="sprintResult" class="result-section" style="display: none;">
+                        <h3>Sprint Planı</h3>
+                        <div id="sprintContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Issues Tab -->
+            <div class="tab-content" id="issues">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Jira Görevleri</h2>
+                        <button class="btn btn-secondary" id="refreshIssuesBtn">
+                            🔄 Yenile
+                        </button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="jqlQuery">JQL Sorgusu (Opsiyonel)</label>
+                        <input type="text" id="jqlQuery" placeholder="örn: status = 'In Progress'">
+                    </div>
+                    
+                    <div id="issuesResult" class="result-section">
+                        <div class="loading" id="issuesLoading">Görevler yükleniyor...</div>
+                        <div id="issuesContent"></div>
+                    </div>
+                </div>
+                
+                <!-- Create New Issue -->
+                <div class="card" style="margin-top: 20px;">
+                    <h3>Yeni Görev Oluştur</h3>
+                    
+                    <div class="form-group">
+                        <label for="issueSummary">Başlık</label>
+                        <input type="text" id="issueSummary" placeholder="Görev başlığı">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="issueDescription">Açıklama</label>
+                        <textarea id="issueDescription" rows="4" placeholder="Görev açıklaması"></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="issueType">Tür</label>
+                            <select id="issueType">
+                                <option value="Task">Task</option>
+                                <option value="Story">Story</option>
+                                <option value="Bug">Bug</option>
+                                <option value="Epic">Epic</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="issuePriority">Öncelik</label>
+                            <select id="issuePriority">
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Highest">Highest</option>
+                                <option value="Low">Low</option>
+                                <option value="Lowest">Lowest</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-success" id="createIssueBtn">
+                        ➕ Görev Oluştur
+                    </button>
+                </div>
+            </div>
+
+            <!-- Report Tab -->
+            <div class="tab-content" id="report">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Proje Durum Raporu</h2>
+                        <button class="btn btn-primary" id="generateReportBtn">
+                            📊 Rapor Oluştur
+                        </button>
+                    </div>
+                    
+                    <div id="reportResult" class="result-section">
+                        <div id="reportContent" class="report-content">
+                            <p class="placeholder-text">Rapor oluşturmak için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2024 ProAgentAI - AI Destekli Proje Yönetimi</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
