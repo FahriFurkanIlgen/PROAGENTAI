@@ -56,7 +56,7 @@ export class AIAgentService {
     `;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -111,7 +111,7 @@ export class AIAgentService {
     `;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -149,7 +149,7 @@ export class AIAgentService {
     ${context ? `Bağlam: ${context}` : ''}`;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -172,7 +172,7 @@ export class AIAgentService {
     Sadece sayı döndür, başka bir şey yazma.`;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Görev: ${taskDescription}` }
@@ -201,7 +201,7 @@ export class AIAgentService {
     Bu görev açıklamasını iyileştir.`;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -234,7 +234,7 @@ export class AIAgentService {
     Lütfen bir proje durum raporu oluştur.`;
 
     const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
