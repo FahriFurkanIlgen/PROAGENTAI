@@ -3,6 +3,7 @@ export interface JiraConfig {
   email: string;
   apiToken: string;
   projectKey: string;
+  boardId?: string;
 }
 
 export interface JiraIssue {
@@ -23,11 +24,14 @@ export interface JiraIssue {
     assignee?: {
       accountId?: string;
       emailAddress?: string;
+      displayName?: string;
     } | null;
     status?: {
       name: string;
     };
     labels?: string[];
+    updated?: string;
+    created?: string;
   };
 }
 

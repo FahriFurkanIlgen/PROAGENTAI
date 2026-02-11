@@ -44,6 +44,16 @@ const elements = {
     generateReportBtn: document.getElementById('generateReportBtn'),
     reportContent: document.getElementById('reportContent'),
     
+    // Daily Report
+    generateDailyReportBtn: document.getElementById('generateDailyReportBtn'),
+    dailyReportContent: document.getElementById('dailyReportContent'),
+    
+    // Sprint Analysis
+    generateSprintAnalysisBtn: document.getElementById('generateSprintAnalysisBtn'),
+    analysisSprintId: document.getElementById('analysisSprintId'),
+    analysisBoardId: document.getElementById('analysisBoardId'),
+    sprintAnalysisContent: document.getElementById('sprintAnalysisContent'),
+    
     // Toast
     toast: document.getElementById('toast')
 };
@@ -86,6 +96,8 @@ function setupEventListeners() {
     elements.refreshIssuesBtn.addEventListener('click', loadIssues);
     elements.createIssueBtn.addEventListener('click', createIssue);
     elements.generateReportBtn.addEventListener('click', generateReport);
+    elements.generateDailyReportBtn.addEventListener('click', generateDailyReport);
+    elements.generateSprintAnalysisBtn.addEventListener('click', generateSprintAnalysis);
 }
 
 // Check Jira Connection
@@ -447,7 +459,163 @@ async function generateReport() {
         showToast('Bağlantı hatası: ' + error.message, 'error');
     } finally {
         elements.generateReportBtn.disabled = false;
-        elements.generateReportBtn.textContent = '📊 Rapor Oluştur';
+        elements.generateReportBtn.textContent = '📊 Proje Raporu Oluştur';
+    }
+}
+
+// Generate Daily Report
+async function generateDailyReport() {
+    elements.generateDailyReportBtn.disabled = true;
+    elements.generateDailyReportBtn.textContent = '⏳ Oluşturuluyor...';
+    elements.dailyReportContent.innerHTML = '<p class="loading">Günlük rapor oluşturuluyor...</p>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/agent/daily-report`);
+        const result = await response.json();
+        
+        if (result.success) {
+            const { report, completedCount, totalCount } = result.data;
+            
+            elements.dailyReportContent.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${completedCount}</div>
+                        <div class="stat-label">Bugün Tamamlanan</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalCount}</div>
+                        <div class="stat-label">Aktif Görevler</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0}%</div>
+                        <div class="stat-label">Tamamlanma Oranı</div>
+                    </div>
+                </div>
+                <div class="report-content">
+                    <pre>${report}</pre>
+                </div>
+            `;
+            showToast('Günlük rapor oluşturuldu', 'success');
+        } else {
+            elements.dailyReportContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Günlük rapor oluşturulamadı', 'error');
+        }
+    } catch (error) {
+        elements.dailyReportContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.generateDailyReportBtn.disabled = false;
+        elements.generateDailyReportBtn.textContent = '📊 Günlük Rapor Oluştur';
+    }
+}
+
+// Generate Sprint Analysis
+async function generateSprintAnalysis() {
+    elements.generateSprintAnalysisBtn.disabled = true;
+    elements.generateSprintAnalysisBtn.textContent = '⏳ Analiz Ediliyor...';
+    elements.sprintAnalysisContent.innerHTML = '<p class="loading">Sprint analizi yapılıyor...</p>';
+    
+    try {
+        const sprintId = elements.analysisSprintId.value;
+        const boardId = elements.analysisBoardId.value;
+        
+        const requestBody = {};
+        if (sprintId) requestBody.sprintId = parseInt(sprintId);
+        if (boardId) requestBody.boardId = parseInt(boardId);
+        
+        const response = await fetch(`${API_BASE}/agent/sprint-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const { sprintHealth, completionRate, memberProgress, risks, recommendations, totalIssues } = result.data;
+            
+            // Health status emoji
+            const healthEmoji = sprintHealth === 'On Track' ? '✅' : sprintHealth === 'At Risk' ? '⚠️' : '❌';
+            
+            let html = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${healthEmoji} ${sprintHealth}</div>
+                        <div class="stat-label">Sprint Durumu</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${completionRate}%</div>
+                        <div class="stat-label">Tamamlanma Oranı</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalIssues}</div>
+                        <div class="stat-label">Toplam Görev</div>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h3>👥 Takım Üyesi Durumları</h3>
+                    <div class="member-list">
+            `;
+            
+            memberProgress.forEach(member => {
+                const statusEmoji = member.status === 'On Track' ? '✅' : member.status === 'Behind' ? '⚠️' : '🚀';
+                const statusClass = member.status === 'On Track' ? 'success' : member.status === 'Behind' ? 'warning' : 'info';
+                
+                html += `
+                    <div class="member-card ${statusClass}">
+                        <div class="member-header">
+                            <strong>${statusEmoji} ${member.member}</strong>
+                            <span class="badge ${statusClass}">${member.status}</span>
+                        </div>
+                        <div class="member-stats">
+                            <span>✅ Tamamlanan: ${member.completedTasks}</span>
+                            <span>📋 Kalan: ${member.remainingTasks}</span>
+                        </div>
+                        ${member.risk && member.risk !== 'Yok' ? `<div class="member-risk">⚠️ ${member.risk}</div>` : ''}
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            if (risks && risks.length > 0) {
+                html += `
+                    <div class="section">
+                        <h3>⚠️ Riskler</h3>
+                        <ul class="risk-list">
+                            ${risks.map(risk => `<li>${risk}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (recommendations && recommendations.length > 0) {
+                html += `
+                    <div class="section">
+                        <h3>💡 Öneriler</h3>
+                        <ul class="recommendation-list">
+                            ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            elements.sprintAnalysisContent.innerHTML = html;
+            showToast('Sprint analizi tamamlandı', 'success');
+        } else {
+            elements.sprintAnalysisContent.innerHTML = `<p class="error">Hata: ${result.error}</p>`;
+            showToast(result.error || 'Sprint analizi yapılamadı', 'error');
+        }
+    } catch (error) {
+        elements.sprintAnalysisContent.innerHTML = `<p class="error">Bağlantı hatası: ${error.message}</p>`;
+        showToast('Bağlantı hatası: ' + error.message, 'error');
+    } finally {
+        elements.generateSprintAnalysisBtn.disabled = false;
+        elements.generateSprintAnalysisBtn.textContent = '📈 Sprint Analizi Yap';
     }
 }
 

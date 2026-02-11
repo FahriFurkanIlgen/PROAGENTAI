@@ -170,17 +170,62 @@
 
             <!-- Report Tab -->
             <div class="tab-content" id="report">
+                <!-- Günlük Rapor -->
                 <div class="card">
                     <div class="card-header">
-                        <h2>Proje Durum Raporu</h2>
+                        <h2>📅 Günlük İlerleme Raporu</h2>
+                        <button class="btn btn-primary" id="generateDailyReportBtn">
+                            📊 Günlük Rapor Oluştur
+                        </button>
+                    </div>
+                    
+                    <div id="dailyReportResult" class="result-section">
+                        <div id="dailyReportContent" class="report-content">
+                            <p class="placeholder-text">Günlük rapor oluşturmak için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sprint Analizi -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🏃 Sprint İlerleme Analizi</h2>
+                        <button class="btn btn-primary" id="generateSprintAnalysisBtn">
+                            📈 Sprint Analizi Yap
+                        </button>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="analysisSprintId">Sprint ID (Opsiyonel)</label>
+                            <input type="number" id="analysisSprintId" placeholder="Boş bırakılırsa tüm aktif görevler">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="analysisBoardId">Board ID (Opsiyonel)</label>
+                            <input type="number" id="analysisBoardId" placeholder="Aktif sprint bulunacak">
+                        </div>
+                    </div>
+                    
+                    <div id="sprintAnalysisResult" class="result-section">
+                        <div id="sprintAnalysisContent" class="report-content">
+                            <p class="placeholder-text">Sprint analizi yapmak için butona tıklayın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Genel Proje Raporu -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📋 Genel Proje Durum Raporu</h2>
                         <button class="btn btn-primary" id="generateReportBtn">
-                            📊 Rapor Oluştur
+                            📊 Proje Raporu Oluştur
                         </button>
                     </div>
                     
                     <div id="reportResult" class="result-section">
                         <div id="reportContent" class="report-content">
-                            <p class="placeholder-text">Rapor oluşturmak için butona tıklayın.</p>
+                            <p class="placeholder-text">Proje raporu oluşturmak için butona tıklayın.</p>
                         </div>
                     </div>
                 </div>

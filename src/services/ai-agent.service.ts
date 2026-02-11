@@ -274,6 +274,115 @@ export class AIAgentService {
   }
 
   /**
+   * Günlük tamamlanan görevleri analiz eder ve rapor oluşturur
+   */
+  async generateDailyReport(completedIssues: JiraIssue[], allIssues: JiraIssue[]): Promise<string> {
+    this.checkOpenAI();
+    
+    // Demo mode - return mock report
+    if (this.demoMode) {
+      return this.getMockDailyReport(completedIssues, allIssues);
+    }
+
+    const systemPrompt = `Sen bir proje yöneticisisin. 
+    Günlük tamamlanan görevleri analiz edip detaylı bir günlük rapor hazırla.
+    
+    Raporda:
+    - Bugün tamamlanan görevlerin özeti
+    - Takım performansı
+    - Kimin ne yaptığı
+    - İlerleme hızı
+    - Öne çıkan başarılar
+    - Dikkat edilmesi gerekenler
+    
+    Türkçe ve net bir dille yaz.`;
+
+    const userPrompt = `
+    Bugün Tamamlanan Görevler:
+    ${JSON.stringify(completedIssues, null, 2)}
+    
+    Tüm Aktif Görevler:
+    ${JSON.stringify(allIssues, null, 2)}
+    
+    Lütfen günlük ilerleme raporu oluştur.
+    `;
+
+    const completion = await this.openai!.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+    });
+
+    return completion.choices[0].message.content || 'Günlük rapor oluşturulamadı.';
+  }
+
+  /**
+   * Sprint ilerleme analizi yapar ve geride kalanları tespit eder
+   */
+  async analyzeSprintProgress(sprintIssues: JiraIssue[], teamMembers: string[]): Promise<any> {
+    this.checkOpenAI();
+    
+    // Demo mode - return mock analysis
+    if (this.demoMode) {
+      return this.getMockSprintAnalysis(sprintIssues, teamMembers);
+    }
+
+    const systemPrompt = `Sen bir Agile/Scrum uzmanısın. 
+    Sprint ilerleme analizi yaparak:
+    
+    1. Genel sprint durumunu değerlendir
+    2. Her takım üyesinin ilerleme durumunu analiz et
+    3. Geride kalan üyeleri belirle
+    4. Risk ve önerileri sun
+    
+    JSON formatında döndür:
+    {
+      "sprintHealth": "string", // "On Track", "At Risk", "Behind"
+      "completionRate": number, // 0-100
+      "memberProgress": [
+        {
+          "member": "string",
+          "status": "string", // "On Track", "Behind", "Ahead"
+          "completedTasks": number,
+          "remainingTasks": number,
+          "risk": "string"
+        }
+      ],
+      "risks": ["string"],
+      "recommendations": ["string"]
+    }`;
+
+    const userPrompt = `
+    Sprint Görevleri:
+    ${JSON.stringify(sprintIssues, null, 2)}
+    
+    Takım Üyeleri: ${teamMembers.join(', ')}
+    
+    Lütfen sprint ilerleme analizi yap.
+    `;
+
+    const completion = await this.openai!.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.5,
+    });
+
+    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      throw new Error('AI response is empty');
+    }
+
+    return JSON.parse(responseContent);
+  }
+
+  /**
    * Demo mode için mock proje analizi
    */
   private getMockAnalysis(request: AIAnalysisRequest): AIAnalysisResponse {
@@ -411,6 +520,89 @@ export class AIAgentService {
 
 [NOT: Bu demo mode çıktısıdır. Gerçek AI analizi için OpenAI API key ekleyin veya DEMO_MODE=false yapın]
     `.trim();
+  }
+
+  /**
+   * Demo günlük rapor
+   */
+  private getMockDailyReport(completedIssues: JiraIssue[], allIssues: JiraIssue[]): string {
+    const completedCount = completedIssues.length;
+    const totalCount = allIssues.length;
+    const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    return `# 📊 Günlük İlerleme Raporu
+
+## 📅 Tarih: ${new Date().toLocaleDateString('tr-TR')}
+
+### ✅ Bugün Tamamlananlar
+- **Toplam:** ${completedCount} görev tamamlandı
+- **Tamamlanma Oranı:** %${completionRate}
+
+${completedIssues.map((issue, index) => `${index + 1}. **${issue.fields.summary}** (${issue.key}) - ${issue.fields.assignee?.displayName || 'Atanmamış'}`).join('\n')}
+
+### 📈 Genel Durum
+- Aktif görev sayısı: ${totalCount}
+- Tamamlanan: ${completedCount}
+- Devam eden: ${totalCount - completedCount}
+
+### 🎯 Öne Çıkanlar
+- Takım bugün ${completedCount} görevi tamamlayarak güzel bir ilerleme kaydetti
+- Sprint hedeflerine doğru düzenli ilerleme sağlanıyor
+
+### 💡 Öneriler
+- Tamamlanma hızı korunmalı
+- Bloke olan görevler kontrol edilmeli
+
+---
+*🟦 Bu bir DEMO raporudur. Gerçek AI analizi için OpenAI API anahtarı gereklidir.*`;
+  }
+
+  /**
+   * Demo sprint analizi
+   */
+  private getMockSprintAnalysis(sprintIssues: JiraIssue[], teamMembers: string[]): any {
+    const completedIssues = sprintIssues.filter(issue => issue.fields.status?.name === 'Done');
+    const completionRate = sprintIssues.length > 0 
+      ? Math.round((completedIssues.length / sprintIssues.length) * 100) 
+      : 0;
+
+    // Görevleri kişilere göre grupla
+    const memberStats = teamMembers.map(member => {
+      const memberIssues = sprintIssues.filter(issue => 
+        issue.fields.assignee?.emailAddress === member || 
+        issue.fields.assignee?.displayName === member
+      );
+      const memberCompleted = memberIssues.filter(issue => issue.fields.status?.name === 'Done');
+      const memberRemaining = memberIssues.length - memberCompleted.length;
+
+      let status = 'On Track';
+      if (memberRemaining > memberIssues.length * 0.6) status = 'Behind';
+      if (memberRemaining < memberIssues.length * 0.3) status = 'Ahead';
+
+      return {
+        member,
+        status,
+        completedTasks: memberCompleted.length,
+        remainingTasks: memberRemaining,
+        risk: status === 'Behind' ? 'Görevleri sprint sonuna kadar tamamlamada zorluk yaşayabilir' : 'Yok'
+      };
+    });
+
+    return {
+      sprintHealth: completionRate >= 70 ? 'On Track' : completionRate >= 50 ? 'At Risk' : 'Behind',
+      completionRate,
+      memberProgress: memberStats,
+      risks: [
+        completionRate < 50 ? 'Sprint hedefine ulaşmak için tempo artırılmalı' : null,
+        memberStats.filter(m => m.status === 'Behind').length > 0 ? 'Bazı takım üyeleri geride kalıyor' : null
+      ].filter(Boolean),
+      recommendations: [
+        'Daily standup toplantılarında blokajlar tespit edilmeli',
+        'Geride kalan üyelere destek verilmeli',
+        'Sprint hedefleri gözden geçirilmeli'
+      ],
+      demoMode: true
+    };
   }
 }
 
