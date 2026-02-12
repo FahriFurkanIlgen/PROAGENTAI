@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   AIAnalysisRequest,
   AIAnalysisResponse,
@@ -8,45 +9,98 @@ import {
   JiraIssue
 } from '../types';
 
+type AIProvider = 'openai' | 'gemini';
+
 export class AIAgentService {
   private openai: OpenAI | null = null;
+  private gemini: GoogleGenerativeAI | null = null;
   private demoMode: boolean = false;
+  private provider: AIProvider;
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
     this.demoMode = process.env.DEMO_MODE === 'true';
+    this.provider = (process.env.AI_PROVIDER as AIProvider) || 'gemini';
     
     if (this.demoMode) {
-      console.warn('🔶 DEMO MODE: Using mock AI responses (OpenAI API will not be called)');
+      console.warn('🔶 DEMO MODE: Using mock AI responses (No API calls will be made)');
       return;
     }
     
-    if (!apiKey || apiKey === 'your-openai-api-key') {
-      console.warn('⚠️  OpenAI API Key not configured. Enabling DEMO MODE.');
-      console.warn('   Set OPENAI_API_KEY in .env or DEMO_MODE=true for mock responses.');
-      this.demoMode = true;
-    } else {
-      try {
-        this.openai = new OpenAI({ apiKey });
-        console.log('✅ OpenAI API initialized successfully');
-      } catch (error) {
-        console.error('Failed to initialize OpenAI, falling back to DEMO MODE');
+    this.initializeProvider();
+  }
+
+  private initializeProvider(): void {
+    if (this.provider === 'gemini') {
+      const apiKey = process.env.GOOGLE_API_KEY;
+      if (!apiKey || apiKey === 'your-google-api-key') {
+        console.warn('⚠️  Google API Key not configured. Enabling DEMO MODE.');
+        console.warn('   Set GOOGLE_API_KEY in .env or change AI_PROVIDER to openai.');
         this.demoMode = true;
+      } else {
+        try {
+          this.gemini = new GoogleGenerativeAI(apiKey);
+          console.log('✅ Google Gemini API initialized successfully');
+        } catch (error) {
+          console.error('Failed to initialize Gemini, falling back to DEMO MODE');
+          this.demoMode = true;
+        }
+      }
+    } else if (this.provider === 'openai') {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey || apiKey === 'your-openai-api-key') {
+        console.warn('⚠️  OpenAI API Key not configured. Enabling DEMO MODE.');
+        console.warn('   Set OPENAI_API_KEY in .env or change AI_PROVIDER to gemini.');
+        this.demoMode = true;
+      } else {
+        try {
+          this.openai = new OpenAI({ apiKey });
+          console.log('✅ OpenAI API initialized successfully');
+        } catch (error) {
+          console.error('Failed to initialize OpenAI, falling back to DEMO MODE');
+          this.demoMode = true;
+        }
       }
     }
   }
 
-  private checkOpenAI(): void {
-    if (!this.openai && !this.demoMode) {
-      throw new Error('OpenAI API is not configured. Set DEMO_MODE=true in .env for mock data.');
+  private checkAI(): void {
+    if (!this.openai && !this.gemini && !this.demoMode) {
+      throw new Error('No AI provider configured. Set DEMO_MODE=true in .env for mock data.');
     }
+  }
+
+  private async callAI(systemPrompt: string, userPrompt: string, jsonMode: boolean = false): Promise<string> {
+    if (this.provider === 'gemini' && this.gemini) {
+      const model = this.gemini.getGenerativeModel({ 
+        model: 'gemini-1.5-flash-latest',
+        generationConfig: jsonMode ? {
+          responseMimeType: 'application/json'
+        } : undefined
+      });
+      
+      const prompt = `${systemPrompt}\n\n${userPrompt}`;
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } else if (this.provider === 'openai' && this.openai) {
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: jsonMode ? { type: 'json_object' } : undefined,
+        temperature: 0.7,
+      });
+      return completion.choices[0].message.content || '';
+    }
+    throw new Error('No AI provider available');
   }
 
   /**
    * Proje gereksinimlerini analiz eder ve görevler önerir
    */
   async analyzeProjectRequirements(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode - return mock data
     if (this.demoMode) {
@@ -73,21 +127,7 @@ export class AIAgentService {
     Lütfen bu projeyi analiz et ve önerilen görevleri JSON formatında döndür.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     const parsed = JSON.parse(responseContent);
 
     return {
@@ -103,7 +143,7 @@ export class AIAgentService {
    * Sprint planlaması yapar
    */
   async planSprint(request: SprintPlanRequest): Promise<SprintPlanResponse> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode - return mock data
     if (this.demoMode) {
@@ -133,21 +173,7 @@ export class AIAgentService {
     Lütfen bu bilgilere göre bir sprint planı oluştur.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.6,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     const parsed = JSON.parse(responseContent);
 
     return {
@@ -162,7 +188,7 @@ export class AIAgentService {
    * Görev önceliğini analiz eder
    */
   async analyzePriority(taskDescription: string, context?: string): Promise<string> {
-    this.checkOpenAI();
+    this.checkAI();
     
     const systemPrompt = `Sen bir proje yöneticisisin. Görevin önem derecesini belirle.
     Seçenekler: Highest, High, Medium, Low, Lowest
@@ -171,40 +197,22 @@ export class AIAgentService {
     const userPrompt = `Görev: ${taskDescription}
     ${context ? `Bağlam: ${context}` : ''}`;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.3,
-      max_tokens: 20
-    });
-
-    return completion.choices[0].message.content?.trim() || 'Medium';
+    const responseContent = await this.callAI(systemPrompt, userPrompt, false);
+    return responseContent.trim() || 'Medium';
   }
 
   /**
    * Görev için tahmini süre hesaplar
    */
   async estimateEffort(taskDescription: string): Promise<number> {
-    this.checkOpenAI();
+    this.checkAI();
     
     const systemPrompt = `Sen deneyimli bir yazılım geliştiricisin. 
     Verilen görevin tahmini süresini saat cinsinden hesapla.
     Sadece sayı döndür, başka bir şey yazma.`;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Görev: ${taskDescription}` }
-      ],
-      temperature: 0.3,
-      max_tokens: 10
-    });
-
-    const hours = parseInt(completion.choices[0].message.content?.trim() || '0');
+    const responseContent = await this.callAI(systemPrompt, `Görev: ${taskDescription}`, false);
+    const hours = parseInt(responseContent.trim());
     return isNaN(hours) ? 8 : hours;
   }
 
@@ -212,7 +220,7 @@ export class AIAgentService {
    * Görev açıklamasını iyileştirir
    */
   async improveTaskDescription(title: string, description?: string): Promise<string> {
-    this.checkOpenAI();
+    this.checkAI();
     
     const systemPrompt = `Sen teknik bir yazarsın. 
     Görev açıklamalarını net, anlaşılır ve detaylı hale getir.
@@ -223,23 +231,15 @@ export class AIAgentService {
     
     Bu görev açıklamasını iyileştir.`;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.5,
-    });
-
-    return completion.choices[0].message.content || description || '';
+    const responseContent = await this.callAI(systemPrompt, userPrompt, false);
+    return responseContent || description || '';
   }
 
   /**
    * Proje raporlaması yapar
    */
   async generateReport(issues: JiraIssue[]): Promise<string> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode - return mock report
     if (this.demoMode) {
@@ -261,23 +261,15 @@ export class AIAgentService {
     
     Lütfen bir proje durum raporu oluştur.`;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.6,
-    });
-
-    return completion.choices[0].message.content || 'Rapor oluşturulamadı.';
+    const responseContent = await this.callAI(systemPrompt, userPrompt, false);
+    return responseContent || 'Rapor oluşturulamadı.';
   }
 
   /**
    * Günlük tamamlanan görevleri analiz eder ve rapor oluşturur
    */
   async generateDailyReport(completedIssues: JiraIssue[], allIssues: JiraIssue[]): Promise<string> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode - return mock report
     if (this.demoMode) {
@@ -307,23 +299,15 @@ export class AIAgentService {
     Lütfen günlük ilerleme raporu oluştur.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.6,
-    });
-
-    return completion.choices[0].message.content || 'Günlük rapor oluşturulamadı.';
+    const responseContent = await this.callAI(systemPrompt, userPrompt, false);
+    return responseContent || 'Günlük rapor oluşturulamadı.';
   }
 
   /**
    * Sprint ilerleme analizi yapar ve geride kalanları tespit eder
    */
   async analyzeSprintProgress(sprintIssues: JiraIssue[], teamMembers: string[]): Promise<any> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode - return mock analysis
     if (this.demoMode) {
@@ -364,21 +348,7 @@ export class AIAgentService {
     Lütfen sprint ilerleme analizi yap.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.5,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     return JSON.parse(responseContent);
   }
 
@@ -386,7 +356,7 @@ export class AIAgentService {
    * Görev için en uygun takım üyesini önerir
    */
   async suggestAssignee(task: JiraIssue, teamMembers: any[]): Promise<any> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode
     if (this.demoMode) {
@@ -421,21 +391,7 @@ export class AIAgentService {
     En uygun atamayı öner.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.5,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     return JSON.parse(responseContent);
   }
 
@@ -443,7 +399,7 @@ export class AIAgentService {
    * Sprint retrospective analizi yapar
    */
   async generateRetrospective(sprintData: any): Promise<any> {
-    this.checkOpenAI();
+    this.checkAI();
     
     // Demo mode
     if (this.demoMode) {
@@ -484,21 +440,7 @@ export class AIAgentService {
     Retrospective raporu hazırla.
     `;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.6,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     return JSON.parse(responseContent);
   }
 
@@ -521,7 +463,7 @@ export class AIAgentService {
     });
     
     // Demo mode veya AI analizi
-    if (this.demoMode || !this.openai) {
+    if (this.demoMode || !this.gemini && !this.openai) {
       return this.getMockBlockerAnalysis(blockedIssues);
     }
     
@@ -557,21 +499,7 @@ export class AIAgentService {
     const userPrompt = `Bloke olmuş olabilecek görevler:
     ${JSON.stringify(blockedIssues, null, 2)}`;
 
-    const completion = await this.openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.5,
-    });
-
-    const responseContent = completion.choices[0].message.content;
-    if (!responseContent) {
-      throw new Error('AI response is empty');
-    }
-
+    const responseContent = await this.callAI(systemPrompt, userPrompt, true);
     return JSON.parse(responseContent);
   }
 
